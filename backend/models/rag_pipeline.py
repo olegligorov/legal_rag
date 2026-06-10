@@ -1,5 +1,6 @@
 from pathlib import Path
 import json
+from typing import Generator
 
 from langchain_core.documents import Document
 
