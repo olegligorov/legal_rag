@@ -1,0 +1,30 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.egg-info/
+dist/
+build/
+
+# Environments
+.venv**
+venv**
+.env
+
+# uv
+uv.lock
+
+# VS Code
+.vscode/
+
+# Data / models (likely large files)
+data/
+*.pdf
+*.bin
+*.pt
+*.ckpt
+
+# OS
+.DS_Store
+.ruff_cache**
