@@ -24,7 +24,7 @@ class Generator:
     """
 
     def __init__(self):
-        if USE_OLLAMA == False:
+        if USE_OLLAMA:
             self.llm = Ollama(model=OLLAMA_MODEL, base_url=OLLAMA_HOST, temperature=LLM_TEMPERATURE)
         else:
             self.llm = ChatAnthropic(

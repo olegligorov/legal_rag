@@ -1,6 +1,5 @@
 from pathlib import Path
 import json
-from typing import Generator
 
 from langchain_core.documents import Document
 
@@ -10,6 +9,7 @@ from config import (
     MIN_RETRIEVED_DOCS,
     RERANKER_SCORE_THRESHOLD,
     RERANKER_TOP_N,
+    VECTOR_RETRIEVAL_K,
 )
 from rag.chunker import Chunker
 from langchain_huggingface import HuggingFaceEmbeddings
@@ -18,7 +18,7 @@ import pickle
 
 from rag.reranker import Reranker
 from rag.retrieval import HybridRetriever
-
+from rag.generation import Generator
 
 class RAGPipeline:
     """
@@ -183,7 +183,7 @@ class RAGPipeline:
             bm25_retriever = pickle.load(f)
 
         self._retriever = HybridRetriever.__new__(HybridRetriever)
-        self._retriever.vector_retriever = vector_db.as_retriever(search_kwargs={"k": 25})
+        self._retriever.vector_retriever = vector_db.as_retriever(search_kwargs={"k": VECTOR_RETRIEVAL_K})
         self._retriever.bm25_retriever = bm25_retriever
 
         self._retriever.reranker = Reranker()
@@ -271,15 +271,16 @@ class RAGPipeline:
             >>> for chunk in pipeline.query_stream("How do I set memory limits?"):
             >>>     print(chunk, end="", flush=True)
         """
-        retrieved_docs = self._retriever.search(
+        retrieved_docs, scores = self._retriever.search(
             query=query,
             top_n=top_n,
             score_threshold=RERANKER_SCORE_THRESHOLD,
-            min_docs=MIN_RETRIEVED_DOCS,
+            min_docs=MIN_RETRIEVED_DOCS
         )
 
-        return retrieved_docs, self._generator.generate_stream(
-            query=query, documents=retrieved_docs
+        return retrieved_docs, scores, self._generator.generate_stream(
+            query=query,
+            documents=retrieved_docs
         )
 
     def query_with_contexts(self, query: str, top_n: int = RERANKER_TOP_N):

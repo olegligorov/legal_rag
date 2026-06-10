@@ -13,7 +13,7 @@ import os
 from pathlib import Path
 import markdown
 
-from config import DATA_PATH, RERANK_TOP_N
+from config import DATA_PATH, RERANKER_TOP_N
 from models.rag_pipeline import RAGPipeline
 
 rag_pipeline = None
@@ -54,7 +54,7 @@ app.add_middleware(
 # Pydantic models
 class QueryRequest(BaseModel):
     question: str = Field(..., min_length=1, description="User's question")
-    top_n: int = Field(RERANK_TOP_N, ge=1, le=20, description="Number of documents to retrieve")
+    top_n: int = Field(RERANKER_TOP_N, ge=1, le=20, description="Number of documents to retrieve")
 
 
 class SourceResponse(BaseModel):
