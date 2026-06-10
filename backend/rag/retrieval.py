@@ -12,6 +12,9 @@ from langchain_core.documents import Document
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_community.retrievers import BM25Retriever
 
+from rag.reranker import Reranker
+
+
 class HybridRetriever:
     """
     Hybrid retrieval system combining dense vector search and sparse keyword search.
@@ -143,25 +146,24 @@ class HybridRetriever:
             tuple: (list[Document], list[float]) - Top-n most relevant documents with their scores,
                 sorted by relevance score. Each document includes page_content and metadata (source, etc.)
         """
-        
+
         vector_docs = self.vector_retriever.invoke(query)
         bm25_docs = self.bm25_retriever.invoke(query)
-        
+
         fused_results = self.rrf(vector_results=vector_docs, bm25_results=bm25_docs)
-        
+
         scored_docs = self.reranker.rerank_with_scores(query, fused_results, top_n=top_n)
-        
+
         if score_threshold is not None:
             filtered_docs = [(score, doc) for score, doc in scored_docs if score >= score_threshold]
-            
+
             if len(filtered_docs) < min_docs and len(scored_docs) >= min_docs:
                 filtered_docs = scored_docs[:min_docs]
         else:
             filtered_docs = scored_docs
-            
+
         if not filtered_docs:
             return [], []
-        
+
         top_scores, top_docs = zip(*filtered_docs)
         return list(top_docs), [float(score) for score in top_scores]
-        

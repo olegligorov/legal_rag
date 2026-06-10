@@ -15,7 +15,9 @@ from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_community.vectorstores import FAISS
 import pickle
 
+from rag.reranker import Reranker
 from rag.retrieval import HybridRetriever
+
 
 class RAGPipeline:
     """
