@@ -6,10 +6,11 @@ from config import (
     RERANKER_TOP_N,
     VECTOR_RETRIEVAL_K,
 )
-from rag import Document
 from langchain_community.vectorstores import FAISS
 import hashlib
-
+from langchain_core.documents import Document
+from langchain_huggingface import HuggingFaceEmbeddings
+from langchain_community.retrievers import BM25Retriever
 
 class HybridRetriever:
     """
@@ -35,9 +36,9 @@ class HybridRetriever:
         if embeddings is None:
             embeddings = HuggingFaceEmbeddings(model_name=EMBEDDING_MODEL)
 
-        vector_db = FAISS.from_documents(documents=semantic_docs, embeddings=embeddings)
+        vector_db = FAISS.from_documents(documents=semantic_docs, embedding=embeddings)
 
-        self.vector_retreiver = vector_db.as_retreiver(search_kwargs={"k": VECTOR_RETRIEVAL_K})
+        self.vector_retriever = vector_db.as_retriever(search_kwargs={"k": VECTOR_RETRIEVAL_K})
         self.bm25_retriever = BM25Retriever.from_documents(semantic_docs)
         self.bm25_retriever.k = BM25_RETRIEVAL_K
 
@@ -103,7 +104,7 @@ class HybridRetriever:
 
         return content_hash
 
-    def searcH(
+    def search(
         self,
         query: str,
         top_n=RERANKER_TOP_N,
@@ -144,7 +145,7 @@ class HybridRetriever:
         """
         
         # get docs
-        vector_docs = self.vector_retreiver.invoke(query)
+        vector_docs = self.vector_retriever.invoke(query)
         bm25_docs = self.bm25_retriever.invoke(query)
         
         # fuse them

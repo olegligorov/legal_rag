@@ -1,6 +1,7 @@
 from pathlib import Path
-from rag import Document
 import json
+
+from langchain_core.documents import Document
 
 from config import (
     CACHE_DIR,
@@ -10,7 +11,11 @@ from config import (
     RERANKER_TOP_N,
 )
 from rag.chunker import Chunker
+from langchain_huggingface import HuggingFaceEmbeddings
+from langchain_community.vectorstores import FAISS
+import pickle
 
+from rag.retrieval import HybridRetriever
 
 class RAGPipeline:
     """
@@ -86,20 +91,11 @@ class RAGPipeline:
 
         print("RAG Pipeline initialized successfully!")
 
-    def load_documents(self, data_directory: str) -> list:
-        """
-        Load documents from JSON files in data_directory.
-
-        Each JSON file is a list of article objects produced by the scraper.
-        Each article becomes one Document with full metadata preserved.
-
-        Returns:
-            list[Document]: One Document per article across all JSON files.
-        """
-
+    def load_documents(self, data_directory: str) -> list[Document]:
         docs = []
         for json_path in sorted(Path(data_directory).glob("**/*.json")):
-            articles = json.loads(json_path.read_text(encoding="utf-8"))
+            with open(json_path, encoding="utf-8") as f:
+                articles = json.load(f)
             for article in articles:
                 content = article.get("content", "").strip()
                 if not content:

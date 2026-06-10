@@ -1,4 +1,4 @@
-from rag import Document
+from langchain_core.documents import Document
 
 MAX_CHARS = 600
 OVERLAP_CHARS = 80
