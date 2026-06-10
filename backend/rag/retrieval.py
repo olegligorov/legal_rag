@@ -144,11 +144,9 @@ class HybridRetriever:
                 sorted by relevance score. Each document includes page_content and metadata (source, etc.)
         """
         
-        # get docs
         vector_docs = self.vector_retriever.invoke(query)
         bm25_docs = self.bm25_retriever.invoke(query)
         
-        # fuse them
         fused_results = self.rrf(vector_results=vector_docs, bm25_results=bm25_docs)
         
         scored_docs = self.reranker.rerank_with_scores(query, fused_results, top_n=top_n)
