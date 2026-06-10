@@ -3,16 +3,30 @@ name = "legal-rag"
 version = "0.1.0"
 requires-python = ">=3.11"
 dependencies = [
+    # Web
     "fastapi>=0.115.0",
     "uvicorn[standard]>=0.30.0",
     "pydantic>=2.0.0",
-    "markdown>=3.7",
-    "langchain_community",
+    "python-dotenv>=1.0.0",
+    # LangChain stack
+    "langchain-core>=1.0.0",
+    "langchain-classic>=1.0.0",
+    "langchain-community>=0.4.0",
+    "langchain-huggingface>=1.0.0",
+    "langchain-anthropic>=1.0.0",
+    # Retrieval
+    "faiss-cpu>=1.7.4",
+    "rank-bm25>=0.2.2",
+    # Embeddings & reranking
+    "sentence-transformers>=3.0.0",
+    "torch>=2.0.0",
+    "huggingface-hub>=0.20.0",
 ]
 
 [project.optional-dependencies]
 dev = [
     "ruff>=0.4.0",
+    "pytest>=8.0.0",
 ]
 
 [tool.ruff]

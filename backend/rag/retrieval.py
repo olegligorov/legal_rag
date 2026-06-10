@@ -8,11 +8,14 @@ from config import (
 )
 from langchain_community.vectorstores import FAISS
 import hashlib
+import pickle
+from pathlib import Path
 from langchain_core.documents import Document
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_community.retrievers import BM25Retriever
 
 from rag.reranker import Reranker
+from rag.tokenization import bulgarian_bm25_tokenize
 
 
 class HybridRetriever:
@@ -42,10 +45,25 @@ class HybridRetriever:
         vector_db = FAISS.from_documents(documents=semantic_docs, embedding=embeddings)
 
         self.vector_retriever = vector_db.as_retriever(search_kwargs={"k": VECTOR_RETRIEVAL_K})
-        self.bm25_retriever = BM25Retriever.from_documents(semantic_docs)
+        self.bm25_retriever = BM25Retriever.from_documents(
+            semantic_docs, preprocess_func=bulgarian_bm25_tokenize
+        )
         self.bm25_retriever.k = BM25_RETRIEVAL_K
 
         self.reranker = Reranker()
+
+    @classmethod
+    def from_indices(cls, vector_db: FAISS, bm25_retriever: BM25Retriever) -> "HybridRetriever":
+        instance = cls.__new__(cls)
+        instance.vector_retriever = vector_db.as_retriever(search_kwargs={"k": VECTOR_RETRIEVAL_K})
+        instance.bm25_retriever = bm25_retriever
+        instance.reranker = Reranker()
+        return instance
+
+    def save(self, faiss_path: Path, bm25_path: Path) -> None:
+        self.vector_retriever.vectorstore.save_local(str(faiss_path))
+        with open(bm25_path, "wb") as f:
+            pickle.dump(self.bm25_retriever, f)
 
     def rrf(self, vector_results, bm25_results, k=60):
         """
@@ -133,18 +151,19 @@ class HybridRetriever:
                 Defaults to RERANK_TOP_N.
             score_threshold (float, optional): Minimum reranker score threshold.
                 Documents below this threshold are filtered out. If None, no filtering.
-                Typical cross-encoder scores range from -10 to +10, with positive
-                scores indicating relevance. Recommended thresholds:
-                - 0.5-1.0: Strict filtering (high precision)
-                - 0.0-0.5: Moderate filtering (balanced)
-                - -1.0-0.0: Lenient filtering (high recall)
+                Reranker scores are sigmoid-normalized to [0, 1], so:
+                - 0.7-1.0: Strict filtering (high precision)
+                - 0.4-0.7: Moderate filtering (balanced)
+                - 0.0-0.4: Lenient filtering (high recall)
+                0.5 corresponds to a neutral cross-encoder logit.
             min_docs (int, optional): Minimum number of documents to return even if
                 they don't meet the threshold. Prevents returning empty results.
                 Defaults to 1.
 
         Returns:
-            tuple: (list[Document], list[float]) - Top-n most relevant documents with their scores,
-                sorted by relevance score. Each document includes page_content and metadata (source, etc.)
+            tuple[list[Document], list[float]]: Top-n most relevant documents and their
+                reranker scores, sorted by descending score. When all docs fall below
+                score_threshold, min_docs best-scoring docs are returned anyway.
         """
 
         vector_docs = self.vector_retriever.invoke(query)

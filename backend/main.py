@@ -2,19 +2,20 @@
 FastAPI server for Plug and Play RAG System
 """
 
+import json
+import logging
+from contextlib import asynccontextmanager
+from typing import List
+
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse, FileResponse, HTMLResponse
-from contextlib import asynccontextmanager
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
-from typing import List
-import json
-import os
-from pathlib import Path
-import markdown
 
 from config import DATA_PATH, RERANKER_TOP_N
 from models.rag_pipeline import RAGPipeline
+
+logger = logging.getLogger(__name__)
 
 rag_pipeline = None
 
@@ -44,8 +45,8 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
+    allow_origins=["http://localhost:3000", "http://localhost:5173"],
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -61,7 +62,7 @@ class SourceResponse(BaseModel):
     rank: int
     source: str
     snippet: str
-    score: float = None
+    score: float | None = None
 
 
 class QueryResponse(BaseModel):
@@ -113,8 +114,9 @@ def query_endpoint(request: QueryRequest):
             sources=sources,
         )
 
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Query processing failed: {str(e)}")
+    except Exception:
+        logger.exception("Query processing failed for question=%r", request.question)
+        raise HTTPException(status_code=500, detail="Query processing failed")
 
 
 @app.post("/api/query/stream")
@@ -136,22 +138,10 @@ def query_stream_endpoint(request: QueryRequest):
 
     def generate():
         try:
-            retrieved_docs, scores, answer_stream = rag_pipeline.query_stream(
+            sources, answer_stream = rag_pipeline.query_stream(
                 query=request.question, top_n=request.top_n
             )
 
-            sources = [
-                {
-                    "rank": idx + 1,
-                    "source": doc.metadata.get("source", "unknown"),
-                    # "snippet": doc.page_content[:200] + "..." if len(doc.page_content) > 200 else doc.page_content
-                    "snippet": doc.page_content,
-                    "score": round(scores[idx], 4) if idx < len(scores) else None,
-                }
-                for idx, doc in enumerate(retrieved_docs)
-            ]
-
-            # First send the sources
             metadata = {"type": "metadata", "sources": sources, "question": request.question}
 
             # \n\n -> According to the SSE specification: Events are separated by blank lines (two consecutive newline characters)
@@ -166,8 +156,9 @@ def query_stream_endpoint(request: QueryRequest):
             # Send done signal
             yield f"data: {json.dumps({'type': 'done'})}\n\n"
 
-        except Exception as e:
-            error_data = {"type": "error", "message": str(e)}
+        except Exception:
+            logger.exception("Streaming query failed for question=%r", request.question)
+            error_data = {"type": "error", "message": "Streaming query failed"}
             yield f"data: {json.dumps(error_data)}\n\n"
 
     return StreamingResponse(
@@ -179,124 +170,6 @@ def query_stream_endpoint(request: QueryRequest):
             "X-Accel-Buffering": "no",  # Disable buffering in nginx
         },
     )
-
-
-@app.get("/api/file")
-def get_file(path: str):
-    """
-    Serve a markdown file from the k8s_data directory as HTML.
-    """
-    try:
-        project_root = Path(__file__).parent.parent
-        absolute_path = Path(path).resolve()
-
-        if not absolute_path.exists():
-            raise HTTPException(status_code=404, detail="File not found")
-
-        if not str(absolute_path).startswith(str(project_root)):
-            raise HTTPException(status_code=403, detail="Access denied")
-
-        with open(absolute_path, "r", encoding="utf-8") as f:
-            content = f.read()
-
-        # Convert markdown to HTML
-        html_content = markdown.markdown(content, extensions=["extra", "codehilite", "toc"])
-
-        # Wrap in a styled HTML template matching the UI's dark theme
-        styled_html = f"""
-        <!DOCTYPE html>
-        <html>
-        <head>
-            <meta charset="utf-8">
-            <meta name="viewport" content="width=device-width, initial-scale=1">
-            <title>{absolute_path.name}</title>
-            <style>
-                body {{
-                    font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, 'Noto Sans', sans-serif;
-                    line-height: 1.6;
-                    max-width: 900px;
-                    margin: 0 auto;
-                    padding: 2rem;
-                    background: oklch(0.145 0 0);
-                    color: oklch(0.985 0 0);
-                }}
-                h1, h2, h3, h4, h5, h6 {{
-                    margin-top: 1.5em;
-                    margin-bottom: 0.5em;
-                    font-weight: 600;
-                    color: oklch(0.985 0 0);
-                }}
-                h1 {{ font-size: 2em; border-bottom: 2px solid oklch(1 0 0 / 10%); padding-bottom: 0.3em; }}
-                h2 {{ font-size: 1.5em; border-bottom: 1px solid oklch(1 0 0 / 10%); padding-bottom: 0.3em; }}
-                code {{
-                    background: oklch(0.205 0 0);
-                    padding: 2px 6px;
-                    border-radius: 0.5rem;
-                    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
-                    font-size: 0.9em;
-                    color: oklch(0.985 0 0);
-                }}
-                pre {{
-                    background: oklch(0.205 0 0);
-                    padding: 1em;
-                    border-radius: 0.5rem;
-                    overflow-x: auto;
-                    border: 1px solid oklch(1 0 0 / 10%);
-                }}
-                pre code {{
-                    background: none;
-                    padding: 0;
-                }}
-                a {{
-                    color: oklch(0.488 0.243 264.376);
-                    text-decoration: none;
-                }}
-                a:hover {{
-                    text-decoration: underline;
-                }}
-                blockquote {{
-                    border-left: 4px solid oklch(1 0 0 / 10%);
-                    padding-left: 1em;
-                    color: oklch(0.708 0 0);
-                    margin: 1em 0;
-                }}
-                table {{
-                    border-collapse: collapse;
-                    width: 100%;
-                    margin: 1em 0;
-                }}
-                th, td {{
-                    border: 1px solid oklch(1 0 0 / 10%);
-                    padding: 8px 12px;
-                    text-align: left;
-                }}
-                th {{
-                    background: oklch(0.205 0 0);
-                    font-weight: 600;
-                }}
-                .file-path {{
-                    background: oklch(0.205 0 0);
-                    padding: 0.5em 1em;
-                    border-radius: 0.5rem;
-                    margin-bottom: 1em;
-                    font-size: 0.9em;
-                    color: oklch(0.708 0 0);
-                    word-break: break-all;
-                    border: 1px solid oklch(1 0 0 / 10%);
-                }}
-            </style>
-        </head>
-        <body>
-            <div class="file-path">📄 {absolute_path}</div>
-            {html_content}
-        </body>
-        </html>
-        """
-
-        return HTMLResponse(content=styled_html)
-
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error reading file: {str(e)}")
 
 
 if __name__ == "__main__":

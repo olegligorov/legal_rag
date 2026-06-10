@@ -1,25 +1,30 @@
 from langchain_core.documents import Document
 
-MAX_CHARS = 600
-OVERLAP_CHARS = 80
+from config import CHUNK_MAX_CHARS as MAX_CHARS, CHUNK_OVERLAP_CHARS as OVERLAP_CHARS
 
 
 class Chunker:
-    def _build_prefix(self, metadata: dict) -> str:
-        """Build a prefix string from metadata hierarchy (law_id | chapter | section | article)."""
-        parts = [metadata.get("law_id", "")]
-        if metadata.get("chapter"):
-            parts.append(metadata["chapter"])
-        if metadata.get("section"):
-            parts.append(metadata["section"])
-        if metadata.get("article"):
-            parts.append(metadata["article"])
-        return " | ".join(p for p in parts if p)
+    def _split_long_paragraph(self, para: str) -> list[str]:
+        """Split a single paragraph that is longer than MAX_CHARS into segments
+        at word boundaries, carrying OVERLAP_CHARS of context between them."""
+        out = []
+        while len(para) > MAX_CHARS:
+            cut = para.rfind(" ", 0, MAX_CHARS)
+            if cut == -1:
+                cut = MAX_CHARS
+            out.append(para[:cut].strip())
+            # carry overlap; if cut <= OVERLAP_CHARS the overlap would wrap back to 0
+            # and cause an infinite loop — advance by cut in that case
+            start = cut - OVERLAP_CHARS if cut > OVERLAP_CHARS else cut
+            para = para[start:].strip()
+        if para:
+            out.append(para)
+        return out
 
     def _split_by_length(self, text: str) -> list[str]:
         """Split text into segments under MAX_CHARS at paragraph then word boundaries."""
         paragraphs = text.split("\n")
-        segments = []
+        segments: list[str] = []
         current = ""
 
         for para in paragraphs:
@@ -27,24 +32,24 @@ class Chunker:
                 if current:
                     segments.append(current.strip())
                     current = ""
-                while len(para) > MAX_CHARS:
-                    cut = para.rfind(" ", 0, MAX_CHARS)
-                    if cut == -1:
-                        cut = MAX_CHARS
-                    segments.append(para[:cut].strip())
-                    # carry overlap into next segment for context continuity
-                    para = para[max(0, cut - OVERLAP_CHARS) :].strip()
-                current = para
+                segments.extend(self._split_long_paragraph(para))
                 continue
 
             candidate = (current + "\n" + para).strip() if current else para
             if len(candidate) > MAX_CHARS:
                 segments.append(current.strip())
-                # start next segment with overlap from end of current
                 overlap = (
                     current[-OVERLAP_CHARS:].strip() if len(current) > OVERLAP_CHARS else current
                 )
-                current = (overlap + "\n" + para).strip()
+                merged = (overlap + "\n" + para).strip() if overlap else para
+                # If even the overlap+para combo overshoots, fall back to splitting
+                # the paragraph alone — overlap is best-effort, not mandatory.
+                if len(merged) > MAX_CHARS:
+                    pieces = self._split_long_paragraph(merged)
+                    segments.extend(pieces[:-1])
+                    current = pieces[-1] if pieces else ""
+                else:
+                    current = merged
             else:
                 current = candidate
 
@@ -54,13 +59,11 @@ class Chunker:
         return segments
 
     def _chunk_doc(self, doc: Document) -> list[Document]:
-        """Chunk a single document into segments with metadata and overlap for continuity."""
-        prefix = self._build_prefix(doc.metadata)
-
+        """Chunk a single document into segments with metadata for context continuity."""
         if len(doc.page_content) <= MAX_CHARS:
             return [
                 Document(
-                    page_content=f"{prefix}\n{doc.page_content}" if prefix else doc.page_content,
+                    page_content=doc.page_content,
                     metadata={**doc.metadata, "chunk_index": 0, "total_chunks": 1},
                 )
             ]
@@ -68,7 +71,7 @@ class Chunker:
         segments = self._split_by_length(doc.page_content)
         return [
             Document(
-                page_content=f"{prefix}\n{segment}" if prefix else segment,
+                page_content=segment,
                 metadata={**doc.metadata, "chunk_index": i, "total_chunks": len(segments)},
             )
             for i, segment in enumerate(segments)

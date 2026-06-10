@@ -9,10 +9,13 @@ from config import (
 )
 from langchain_community.llms import Ollama
 from langchain_anthropic import ChatAnthropic
+from langchain_core.documents import Document
 from langchain_core.prompts import PromptTemplate, ChatPromptTemplate
 from langchain_classic.chains.combine_documents import create_stuff_documents_chain
-from typing import List, Dict
+import logging
 from templates import SYSTEM_TEXT_TEMPLATE
+
+logger = logging.getLogger(__name__)
 
 
 class Generator:
@@ -20,7 +23,7 @@ class Generator:
     LLM-based answer generator for RAG system.
 
     Takes retrieved context documents and a user query, then generates
-    a natural language answer using an LLM (via Ollama).
+    a natural language answer using an LLM (Claude API or Ollama).
     """
 
     def __init__(self):
@@ -37,7 +40,7 @@ class Generator:
 
         self.system_template = SYSTEM_TEXT_TEMPLATE
         self.doc_prompt = PromptTemplate.from_template(
-            "--- Document (Source: {source}) ---\n{page_content}\n--- END OF DOCUMENT ---"
+            "{law_id} | {chapter} | {article}\n{page_content}"
         )
 
         self.qa_prompt = ChatPromptTemplate.from_messages(
@@ -48,45 +51,45 @@ class Generator:
             self.llm, self.qa_prompt, document_prompt=self.doc_prompt
         )
 
-        model = "Ollama" if USE_OLLAMA == True else CLAUDE_MODEL
+        model = "Ollama" if USE_OLLAMA else CLAUDE_MODEL
         print(f"Generator initialized: {model} (temperature={LLM_TEMPERATURE})")
 
     def generate(
-        self, query: str, documents: List, scores: List[float] = None, include_sources: bool = True
-    ) -> Dict:
+        self,
+        query: str,
+        documents: list[Document],
+        scores: list[float] | None = None,
+        include_sources: bool = True,
+    ) -> dict:
         """
         Generate an answer to the query using retrieved documents as context.
 
         Args:
-            query (str): User's question
-            documents (list[Document]): Retrieved context documents (from retriever)
-            scores (list[float], optional): Relevance scores for each document
-            include_sources (bool): Whether to include source documents in response
+            query: User's question
+            documents: Retrieved context documents (from retriever)
+            scores: Relevance scores for each document, aligned with `documents`
+            include_sources: Whether to include source documents in response
 
         Returns:
-            dict: Response containing:
+            dict with keys:
                 - answer (str): Generated answer
                 - sources (list[dict]): Source documents with metadata (if include_sources=True)
-
-        Example:
-            >>> generator = Generator()
-            >>> docs = [...]  # Retrieved documents
-            >>> result = generator.generate("How do I set Pod limits?", docs)
-            >>> print(result['answer'])
         """
 
         answer = self.combine_docs_chain.invoke({"question": query, "context": documents})
+        # ChatAnthropic returns AIMessage; Ollama returns a plain string
+        answer = getattr(answer, "content", answer).strip()
 
-        response = {
-            "answer": answer.strip(),
-        }
+        logger.info("query=%r sources=%d answer_len=%d", query, len(documents), len(answer))
+
+        response: dict = {"answer": answer}
 
         if include_sources:
-            response["sources"] = self._format_sources(documents, scores)
+            response["sources"] = self.format_sources(documents, scores)
 
         return response
 
-    def generate_stream(self, query: str, documents: List):
+    def generate_stream(self, query: str, documents: list[Document]):
         """
         Generate an answer with streaming support.
 
@@ -94,46 +97,27 @@ class Generator:
         for real-time streaming to the client.
 
         Args:
-            query (str): User's question
-            documents (list[Document]): Retrieved context documents (from retriever)
+            query: User's question
+            documents: Retrieved context documents (from retriever)
 
         Yields:
             str: Chunks of the generated answer as they arrive
-
-        Example:
-            >>> generator = Generator()
-            >>> docs = [...]  # Retrieved documents
-            >>> for chunk in generator.generate_stream("How do I set Pod limits?", docs):
-            >>>     print(chunk, end="", flush=True)
         """
 
         for chunk in self.combine_docs_chain.stream({"question": query, "context": documents}):
             yield chunk
 
-    def _format_sources(self, documents: List, scores: List[float] = None) -> List[Dict]:
-        """
-        Format documents as source references for the response.
-
-        Args:
-            documents (list[Document]): Retrieved documents
-            scores (list[float], optional): Relevance scores for each document
-
-        Returns:
-            list[dict]: List of source dictionaries with metadata
-        """
+    def format_sources(
+        self, documents: list[Document], scores: list[float] | None = None
+    ) -> list[dict]:
         sources = []
-
         for idx, doc in enumerate(documents, 1):
             source_dict = {
                 "rank": idx,
                 "source": doc.metadata.get("source", "unknown"),
-                # "snippet": doc.page_content[:200] + "..." if len(doc.page_content) > 200 else doc.page_content
                 "snippet": doc.page_content,
             }
-
             if scores and idx - 1 < len(scores):
                 source_dict["score"] = round(scores[idx - 1], 4)
-
             sources.append(source_dict)
-
         return sources
