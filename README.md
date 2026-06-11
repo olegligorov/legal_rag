@@ -227,4 +227,69 @@ The system prompt in `backend/templates.py` is built for tool-use:
 - **Stable citations** — `[Чл. X, <law_id>]` inline after every claim. Regex-parseable.
 - **Language mirroring** — answers in the question's language; legal text quoted verbatim from the source.
 
-To expose this over MCP, wrap `RAGPipeline.query` (or `query_with_contexts` for evaluation) as an MCP tool. The `query_with_contexts` method returns `{question, answer, contexts, sources}` — the shape expected by RAGAS / TruLens-style evaluation harnesses.
+### MCP server
+
+The `mcp/` directory is a standalone FastMCP server that exposes the RAG backend as MCP tools. It is a thin HTTP client — it does not load any ML models itself.
+
+**Tools exposed:**
+
+| Tool | Description |
+|------|-------------|
+| `query_rag_tool` | Answer a single legal question (returns answer + sources) |
+| `retrieve_documents` | Return ranked source articles without generating an answer |
+| `batch_query_tool` | Answer multiple questions in parallel (returns per-question results + stats) |
+| `check_rag_health` | Verify the backend is reachable and the pipeline is loaded |
+
+#### Install
+
+```bash
+cd mcp
+uv sync
+```
+
+#### Configure
+
+The MCP server reads configuration from environment variables prefixed with `RAG_`:
+
+| Var | Default | Notes |
+|-----|---------|-------|
+| `RAG_QUERY_URL` | `http://localhost:8000` | Base URL of the running backend |
+| `RAG_API_TIMEOUT` | `30.0` | Per-request timeout in seconds |
+| `RAG_BATCH_MAX_CONCURRENCY` | `5` | Max parallel requests for `batch_query_tool` |
+
+Create `mcp/.env` if you need to override any of these.
+
+#### Run
+
+The backend must be running first (see [Run](#run) above).
+
+```bash
+cd mcp
+uv run fastmcp run src/mcp_server.py
+```
+
+For SSE transport (useful when the agent connects over HTTP rather than stdio):
+
+```bash
+uv run fastmcp run src/mcp_server.py --transport sse --port 8001
+```
+
+#### Connect from Claude Code
+
+Add the MCP server to your Claude Code config (`~/.claude/settings.json` or `.claude/settings.json`):
+
+```json
+{
+  "mcpServers": {
+    "legal-rag": {
+      "command": "uv",
+      "args": ["run", "--directory", "/path/to/legal_rag/mcp", "fastmcp", "run", "src/mcp_server.py"],
+      "env": {
+        "RAG_QUERY_URL": "http://localhost:8000"
+      }
+    }
+  }
+}
+```
+
+Replace `/path/to/legal_rag/mcp` with the absolute path to the `mcp/` directory.
