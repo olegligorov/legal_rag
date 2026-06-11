@@ -56,6 +56,3 @@ Each JSON in `documentation/` is a list of article objects:
 2. Query: `HybridRetriever.search` (FAISS k=25 + BM25 k=25 → RRF → CrossEncoder top_n=5, threshold=0.2)
 3. Generate: `Generator.generate` / `generate_stream` via LangChain `create_stuff_documents_chain`
 
-## Known gaps (to implement)
-- `templates.py` — `SYSTEM_TEXT_TEMPLATE` is an empty string; system prompt for the LLM is not written yet
-- The system prompt should be domain-specific: instruct the LLM to answer questions about Bulgarian law using only the provided article context, cite articles by number, and respond in the same language as the question
