@@ -227,4 +227,3 @@ The system prompt in `backend/templates.py` is built for tool-use:
 - **Stable citations** — `[Чл. X, <law_id>]` inline after every claim. Regex-parseable.
 - **Language mirroring** — answers in the question's language; legal text quoted verbatim from the source.
 
-To expose this over MCP, wrap `RAGPipeline.query` (or `query_with_contexts` for evaluation) as an MCP tool. The `query_with_contexts` method returns `{question, answer, contexts, sources}` — the shape expected by RAGAS / TruLens-style evaluation harnesses.
