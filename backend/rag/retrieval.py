@@ -151,11 +151,6 @@ class HybridRetriever:
                 Defaults to RERANK_TOP_N.
             score_threshold (float, optional): Minimum reranker score threshold.
                 Documents below this threshold are filtered out. If None, no filtering.
-                Reranker scores are sigmoid-normalized to [0, 1], so:
-                - 0.7-1.0: Strict filtering (high precision)
-                - 0.4-0.7: Moderate filtering (balanced)
-                - 0.0-0.4: Lenient filtering (high recall)
-                0.5 corresponds to a neutral cross-encoder logit.
             min_docs (int, optional): Minimum number of documents to return even if
                 they don't meet the threshold. Prevents returning empty results.
                 Defaults to 1.

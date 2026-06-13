@@ -208,4 +208,8 @@ class RAGPipeline:
             "answer": result["answer"],
             "contexts": [doc.page_content for doc in retrieved_docs],
             "sources": result["sources"],
+            "retrieved_articles": [
+                {"law_id": doc.metadata["law_id"], "article": doc.metadata["article"]}
+                for doc in retrieved_docs
+            ],
         }
