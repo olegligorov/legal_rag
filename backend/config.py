@@ -25,7 +25,8 @@ OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "llama3")
 
 # Claude API Keys
 CLAUDE_MODEL = os.getenv("CLAUDE_MODEL", "anthropic--claude-4.5-haiku")
-CLAUDE_URL = os.getenv("CLAUDE_URL", "http://localhost:6655")
+#CLAUDE_URL = os.getenv("CLAUDE_URL", "http://localhost:6655")
+CLAUDE_URL = os.getenv("CLAUDE_URL", "").strip()
 CLAUDE_API_KEY = os.getenv("CLAUDE_API_KEY")
 
 # Retrieval
@@ -41,3 +42,7 @@ CHUNK_OVERLAP_CHARS = int(os.getenv("CHUNK_OVERLAP_CHARS", "80"))
 RERANKER_TOP_N = int(os.getenv("RERANKER_TOP_N", "5"))
 RERANKER_SCORE_THRESHOLD = float(os.getenv("RERANKER_SCORE_THRESHOLD", "0.4"))
 MIN_RETRIEVED_DOCS = int(os.getenv("MIN_RETRIEVED_DOCS", "1"))
+
+# Agentic legal case analysis
+LEGAL_AGENT_MAX_SEARCHES = int(os.getenv("LEGAL_AGENT_MAX_SEARCHES", "6"))
+LEGAL_AGENT_TOP_N_PER_SEARCH = int(os.getenv("LEGAL_AGENT_TOP_N_PER_SEARCH", "5"))

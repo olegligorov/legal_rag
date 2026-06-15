@@ -239,6 +239,7 @@ The `mcp/` directory is a standalone FastMCP server that exposes the RAG backend
 | `retrieve_documents` | Return ranked source articles without generating an answer |
 | `batch_query_tool` | Answer multiple questions in parallel (returns per-question results + stats) |
 | `check_rag_health` | Verify the backend is reachable and the pipeline is loaded |
+| `analyze_legal_case_tool` | Multi-step analysis of a complex legal case with a search trace |
 
 #### Install
 

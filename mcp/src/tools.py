@@ -59,3 +59,15 @@ async def check_rag_health(client: RAGClient) -> dict[str, Any]:
         return await client.health()
     except Exception as e:
         raise _tool_error(e) from e
+
+
+async def analyze_legal_case(
+    client: RAGClient,
+    case: str,
+    top_n_per_search: int | None = None,
+    max_searches: int | None = None,
+) -> dict[str, Any]:
+    try:
+        return await client.analyze_case(case, top_n_per_search, max_searches)
+    except Exception as e:
+        raise _tool_error(e) from e

@@ -12,7 +12,12 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
-from config import DATA_PATH, RERANKER_TOP_N
+from config import (
+    DATA_PATH,
+    LEGAL_AGENT_MAX_SEARCHES,
+    LEGAL_AGENT_TOP_N_PER_SEARCH,
+    RERANKER_TOP_N,
+)
 from models.rag_pipeline import RAGPipeline
 
 logger = logging.getLogger(__name__)
@@ -71,6 +76,27 @@ class QueryResponse(BaseModel):
     sources: List[SourceResponse]
 
 
+class LegalCaseRequest(BaseModel):
+    case: str = Field(..., min_length=10, description="Facts and question forming the legal case")
+    top_n_per_search: int = Field(LEGAL_AGENT_TOP_N_PER_SEARCH, ge=1, le=20)
+    max_searches: int = Field(LEGAL_AGENT_MAX_SEARCHES, ge=2, le=10)
+
+
+class SearchStepResponse(BaseModel):
+    step: int
+    query: str
+    documents_found: int
+    new_documents: int
+
+
+class LegalCaseResponse(BaseModel):
+    case: str
+    analysis: str
+    issues: List[str]
+    search_trace: List[SearchStepResponse]
+    sources: List[SourceResponse]
+
+
 @app.get("/api/health")
 def health_check():
     """
@@ -117,6 +143,27 @@ def query_endpoint(request: QueryRequest):
     except Exception:
         logger.exception("Query processing failed for question=%r", request.question)
         raise HTTPException(status_code=500, detail="Query processing failed")
+
+
+@app.post("/api/analyze", response_model=LegalCaseResponse)
+def analyze_legal_case(request: LegalCaseRequest):
+    """Analyze a legal case through multiple focused retrieval steps."""
+    if rag_pipeline is None:
+        raise HTTPException(
+            status_code=503,
+            detail="RAG pipeline not initialized. Please wait for startup to complete.",
+        )
+
+    try:
+        result = rag_pipeline.analyze_case(
+            case_text=request.case,
+            top_n_per_search=request.top_n_per_search,
+            max_searches=request.max_searches,
+        )
+        return LegalCaseResponse(case=request.case, **result)
+    except Exception:
+        logger.exception("Legal case analysis failed for case=%r", request.case)
+        raise HTTPException(status_code=500, detail="Legal case analysis failed")
 
 
 @app.post("/api/query/stream")
