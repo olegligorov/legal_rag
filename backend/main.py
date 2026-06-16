@@ -155,27 +155,6 @@ def query_endpoint(request: QueryRequest):
         raise HTTPException(status_code=500, detail="Query processing failed")
 
 
-@app.post("/api/analyze", response_model=LegalCaseResponse)
-def analyze_legal_case(request: LegalCaseRequest):
-    """Analyze a legal case through multiple focused retrieval steps."""
-    if rag_pipeline is None:
-        raise HTTPException(
-            status_code=503,
-            detail="RAG pipeline not initialized. Please wait for startup to complete.",
-        )
-
-    try:
-        result = rag_pipeline.analyze_case(
-            case_text=request.case,
-            top_n_per_search=request.top_n_per_search,
-            max_searches=request.max_searches,
-        )
-        return LegalCaseResponse(case=request.case, **result)
-    except Exception:
-        logger.exception("Legal case analysis failed for case=%r", request.case)
-        raise HTTPException(status_code=500, detail="Legal case analysis failed")
-
-
 @app.post("/api/query/stream")
 def query_stream_endpoint(request: QueryRequest):
     """

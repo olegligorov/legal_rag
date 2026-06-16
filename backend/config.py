@@ -25,8 +25,7 @@ OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "llama3")
 
 # Claude API Keys
 CLAUDE_MODEL = os.getenv("CLAUDE_MODEL", "anthropic--claude-4.5-haiku")
-#CLAUDE_URL = os.getenv("CLAUDE_URL", "http://localhost:6655")
-CLAUDE_URL = os.getenv("CLAUDE_URL", "").strip()
+CLAUDE_URL = os.getenv("CLAUDE_URL", "http://localhost:6655")
 CLAUDE_API_KEY = os.getenv("CLAUDE_API_KEY")
 
 # Retrieval
