@@ -1,7 +1,8 @@
+import { useState } from 'react';
 import { Layout } from '@/components/layout';
 import { MessageList, ChatContainer } from '@/components/chat';
 import { WelcomeScreen } from '@/components/welcome';
-import { useChat } from '@/hooks/useChat';
+import { useChat, type ChatMode } from '@/hooks/useChat';
 import { ThemeProvider } from '@/components/theme-provider';
 
 const SUGGESTED_QUESTIONS = [
@@ -12,7 +13,8 @@ const SUGGESTED_QUESTIONS = [
 ];
 
 function App() {
-  const { messages, input, setInput, isLoading, sendMessage } = useChat();
+  const [mode, setMode] = useState<ChatMode>('quick');
+  const { messages, input, setInput, isLoading, sendMessage } = useChat(mode);
 
   const handleSubmit = () => {
     if (input.trim() && !isLoading) {
@@ -35,6 +37,8 @@ function App() {
           onChange={setInput}
           onSubmit={handleSubmit}
           isLoading={isLoading}
+          mode={mode}
+          onModeChange={setMode}
         />
       </Layout>
     </ThemeProvider>
