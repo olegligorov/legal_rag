@@ -65,6 +65,21 @@ class RAGClient:
         response.raise_for_status()
         return response.json()
 
+    async def analyze_case(
+        self,
+        case: str,
+        top_n_per_search: int | None = None,
+        max_searches: int | None = None,
+    ) -> dict[str, Any]:
+        body: dict[str, Any] = {"case": case}
+        if top_n_per_search is not None:
+            body["top_n_per_search"] = top_n_per_search
+        if max_searches is not None:
+            body["max_searches"] = max_searches
+        response: httpx.Response = await self.client.post("/api/analyze", json=body)
+        response.raise_for_status()
+        return response.json()
+    
     async def retrieve(
         self, question: str, top_n: int | None = None
     ) -> dict[str, Any]:
