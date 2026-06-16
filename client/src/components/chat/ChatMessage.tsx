@@ -1,19 +1,46 @@
 import { Message, MessageContent, MessageResponse } from '@/components/ai-elements/message';
 import { Sources, SourcesTrigger, SourcesContent, Source as SourceElement } from '@/components/ai-elements/sources';
+import { AgentTraceAccordion } from './AgentTraceAccordion';
 import type { UIMessage } from 'ai';
 import type { Source } from '@/types';
+import type { AgentTraceEntry, CitationValidation } from '@/types/agent';
+
+interface AgentMeta {
+  trace: AgentTraceEntry[];
+  toolCallsUsed: number;
+  citationValidation: CitationValidation | null;
+  isStreaming: boolean;
+}
 
 interface ChatMessageProps {
   role: UIMessage['role'];
   content: string;
   sources?: Source[];
   isStreaming?: boolean;
+  agentMeta?: AgentMeta;
+  /** True only for the very first render of this message (controls accordion default-open). */
+  isNew?: boolean;
 }
 
-export function ChatMessage({ role, content, sources, isStreaming }: ChatMessageProps) {
+export function ChatMessage({
+  role,
+  content,
+  sources,
+  isStreaming,
+  agentMeta,
+  isNew,
+}: ChatMessageProps) {
   return (
     <Message from={role} className="mb-4">
       <MessageContent>
+        {agentMeta && (
+          <AgentTraceAccordion
+            trace={agentMeta.trace}
+            toolCallsUsed={agentMeta.toolCallsUsed}
+            isStreaming={agentMeta.isStreaming}
+            defaultOpen={isNew ?? false}
+          />
+        )}
         {sources && sources.length > 0 && (
           <Sources>
             <SourcesTrigger count={sources.length} />

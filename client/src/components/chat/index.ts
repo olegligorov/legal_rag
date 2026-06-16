@@ -2,3 +2,4 @@ export { ChatMessage } from './ChatMessage';
 export { ChatInput } from './ChatInput';
 export { ChatContainer } from './ChatContainer';
 export { MessageList } from './MessageList';
+export { AgentTraceAccordion } from './AgentTraceAccordion';

@@ -41,3 +41,14 @@ CHUNK_OVERLAP_CHARS = int(os.getenv("CHUNK_OVERLAP_CHARS", "80"))
 RERANKER_TOP_N = int(os.getenv("RERANKER_TOP_N", "5"))
 RERANKER_SCORE_THRESHOLD = float(os.getenv("RERANKER_SCORE_THRESHOLD", "0.4"))
 MIN_RETRIEVED_DOCS = int(os.getenv("MIN_RETRIEVED_DOCS", "1"))
+
+# Agent (multi-hop ReAct over MCP)
+# Default to the same model as the generator; swap to a stronger model for thesis
+# evaluation runs by setting AGENT_MODEL in .env.
+AGENT_MODEL = os.getenv("AGENT_MODEL", CLAUDE_MODEL)
+# Hard cap on tool calls per /api/agent request. On overflow the agent is forced
+# into a synthesis pass with whatever evidence it has gathered.
+AGENT_MAX_TOOL_CALLS = int(os.getenv("AGENT_MAX_TOOL_CALLS", "6"))
+# Where the FastMCP server is reachable. Must be running before the agent is invoked.
+MCP_SERVER_URL = os.getenv("MCP_SERVER_URL", "http://127.0.0.1:8001/sse")
+MCP_TRANSPORT = os.getenv("MCP_TRANSPORT", "sse")

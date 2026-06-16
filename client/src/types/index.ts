@@ -20,6 +20,13 @@ export interface Message {
   role: 'user' | 'assistant';
   content: string;
   sources?: Source[];
+  /** Present on agent-mode messages */
+  agentMeta?: {
+    trace: import('@/types/agent').AgentTraceEntry[];
+    toolCallsUsed: number;
+    citationValidation: import('@/types/agent').CitationValidation | null;
+    isStreaming: boolean;
+  };
 }
 
 /**

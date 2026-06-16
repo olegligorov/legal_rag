@@ -115,6 +115,8 @@ class Generator:
             source_dict = {
                 "rank": idx,
                 "source": doc.metadata.get("source", "unknown"),
+                "law_id": doc.metadata.get("law_id", ""),
+                "article": doc.metadata.get("article", ""),
                 "snippet": doc.page_content,
             }
             if scores and idx - 1 < len(scores):

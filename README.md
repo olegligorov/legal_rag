@@ -62,9 +62,11 @@ legal_rag/
 │   └── zakon_za_zadalzheniqta_i_dogovorite.json
 ├── client/                    # (frontend, separate)
 └── backend/
-    ├── main.py                # FastAPI app: /api/health, /api/query, /api/query/stream
+    ├── main.py                # FastAPI app: /api/health, /api/query[/stream], /api/agent[/stream]
     ├── config.py              # All config + env vars (single source of truth)
-    ├── templates.py           # System prompt for the LLM
+    ├── templates.py           # System prompt for the baseline RAG generator
+    ├── prompt_rules.py        # Shared LANGUAGE / CITATION / ANSWER_SHAPE rules (used by templates.py and agent/prompts.py)
+    ├── citations.py           # Single source of truth for parsing `[Чл. X, <law_id>]` markers
     ├── pyproject.toml         # Dependencies
     ├── .env.example           # Copy to .env and fill in
     ├── models/
@@ -75,9 +77,22 @@ legal_rag/
     │   ├── reranker.py        # CrossEncoder wrapper (auto MPS/CUDA/CPU, sigmoid-normalized)
     │   ├── tokenization.py    # Bulgarian BM25 tokenizer
     │   └── generation.py      # LLM answer generation (Claude or Ollama, streaming + non-streaming)
+    ├── agent/                 # LangGraph ReAct agent over MCP
+    │   ├── graph.py           # StateGraph topology with hard tool-call cap + force_synthesize escape
+    │   ├── runner.py          # run_agent / stream_agent; source dedup; citation passthrough validation
+    │   ├── mcp_client.py      # Singleton MultiServerMCPClient (SSE)
+    │   └── prompts.py         # ReAct + force-synthesis prompts
+    ├── evaluation/            # Head-to-head harness (baseline vs agent)
+    │   ├── evaluator.py       # Baseline runner
+    │   ├── agent_evaluator.py # Agent runner
+    │   ├── metrics.py         # citation_recall/precision, faithfulness, answer_*
+    │   ├── aggregation.py     # {n, mean, median, p95, min, max, stdev, sum}; deltas()
+    │   ├── dataset.json       # Single-hop questions
+    │   └── dataset_multihop.json
     ├── scripts/
     │   ├── scrape_laws.py     # One-shot scraper: lex.bg HTML → structured JSON
-    │   └── clear_cache.py     # Wipe .cache/indices/ to force reindex
+    │   ├── clear_cache.py     # Wipe .cache/indices/ to force reindex
+    │   └── run_head_to_head.py # Eval entrypoint
     └── tests/
 ```
 
@@ -124,6 +139,9 @@ Edit `.env`:
 | `RERANKER_TOP_N`           | `5`                           | Final number of chunks sent to the LLM                    |
 | `RERANKER_SCORE_THRESHOLD` | `0.4`                         | Sigmoid-normalized score in `[0, 1]`                      |
 | `MIN_RETRIEVED_DOCS`       | `1`                           | Don't return empty even if all scores are below threshold |
+| `AGENT_MODEL`              | `$CLAUDE_MODEL`               | Model for the ReAct agent; defaults to `CLAUDE_MODEL`     |
+| `AGENT_MAX_TOOL_CALLS`     | `6`                           | Hard cap on tool calls per agent run                      |
+| `MCP_SERVER_URL`           | `http://127.0.0.1:8001/sse`   | Where the agent connects to the MCP server                |
 
 ### Get the data
 
@@ -197,6 +215,47 @@ Stream events:
 2. `data: {"type":"chunk","content":"..."}` (repeated)
 3. `data: {"type":"done"}`
 
+### Agent (non-streaming)
+
+A LangGraph ReAct agent that reasons over the same corpus by calling the MCP tools (`query_rag_tool`, `batch_query_tool`). Use this for **multi-hop questions** that need decomposition — e.g. "How does X interact with Y?" where X is in one law and Y in another.
+
+```bash
+curl -X POST http://localhost:8000/api/agent \
+  -H 'Content-Type: application/json' \
+  -d '{"question": "..."}'
+```
+
+Returns:
+
+```json
+{
+  "question": "...",
+  "answer": "...",
+  "sources": [{"law_id": "...", "article": "...", "snippet": "...", ...}],
+  "trace": [{"type": "thought" | "tool_call" | "tool_result" | "answer", ...}],
+  "tool_calls_used": 2,
+  "citation_validation": {
+    "preserved": ["[Чл. 155, Кодекс на труда]"],
+    "dropped": [],
+    "invented": []
+  }
+}
+```
+
+The agent is hard-capped at `AGENT_MAX_TOOL_CALLS` (default 6). On cap, a `force_synthesize` step composes the answer from whatever was retrieved. Sources across tool calls are deduplicated by `(law_id, article)`. The MCP server must be running on `MCP_SERVER_URL` (default `http://127.0.0.1:8001/sse`) before invoking this endpoint — start it via the [MCP server](#mcp-server) instructions below.
+
+### Agent (streaming, SSE)
+
+```bash
+curl -X POST http://localhost:8000/api/agent/stream \
+  -H 'Content-Type: application/json' \
+  -d '{"question": "..."}'
+```
+
+Stream events: `metadata` → `thought` / `tool_call` / `tool_result` / `chunk` (interleaved) → `done`.
+
+`chunk` events that are followed by a `thought` before any `tool_call` belong to that thought (collapse them in the UI); `chunk` events followed by `done` with no intervening `thought` are the final answer.
+
 ## Cache invalidation
 
 Indices are cached to `backend/.cache/indices/` with a manifest fingerprinted on:
@@ -217,6 +276,36 @@ python scripts/clear_cache.py
 cd backend
 pytest
 ```
+
+## Evaluation
+
+Head-to-head harness that runs the **baseline RAG** and the **agent** on the same dataset and writes per-question metrics + aggregates to `backend/results/head_to_head_<timestamp>.json`.
+
+```bash
+cd backend
+# Both backend (port 8000) and the MCP server (port 8001) must be running.
+python -u scripts/run_head_to_head.py --dataset evaluation/dataset_multihop.json
+```
+
+Use `python -u` so per-question progress prints live through `tee`. Other flags: `--limit N` for smoke runs, `--skip-generation` to skip LLM-judge metrics (faithfulness / relevancy / correctness).
+
+What the JSON contains:
+
+- `config` — model, temperature, retrieval params, MCP URL, dataset path + SHA-256, git SHA, dirty flag, timestamp. Reproducibility envelope.
+- `baseline.per_question`, `agent.per_question` — full rows.
+- `baseline.aggregate`, `agent.aggregate` — `{n, mean, median, p95, min, max, stdev, sum}` per metric. `None` values (e.g. `citation_precision` when the model didn't cite anything) are skipped, not averaged as zero.
+- `deltas` — agent − baseline on shared metrics.
+- `agent_only` — `set_recall@k`, `tool_calls_used`, `citations_preserved/dropped/invented`.
+- `baseline_only` — `precision@k` (rank-aware; the agent's source order is first-appearance, so its precision@k isn't comparable).
+
+Datasets live in `backend/evaluation/`:
+
+| File | Contents |
+|------|----------|
+| `dataset.json` | Single-hop questions |
+| `dataset_multihop.json` | 15 multi-hop questions across multi-article-same-law / cross-law / sequential-dependency |
+
+Schema is validated by `tests/test_dataset.py` — every expected `(law_id, article)` pair must resolve in the source corpus, so typos can't silently turn into recall=0.
 
 ## Agentic use (MCP)
 

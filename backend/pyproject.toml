@@ -14,6 +14,9 @@ dependencies = [
     "langchain-community>=0.4.0",
     "langchain-huggingface>=1.0.0",
     "langchain-anthropic>=1.0.0",
+    # Agent
+    "langgraph>=0.2.50",
+    "langchain-mcp-adapters>=0.1.0",
     # Retrieval
     "faiss-cpu>=1.7.4",
     "rank-bm25>=0.2.2",
