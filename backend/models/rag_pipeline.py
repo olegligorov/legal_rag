@@ -3,7 +3,6 @@ import json
 
 from langchain_core.documents import Document
 
-from agents.legal_case_agent import LegalCaseAgent
 from config import (
     CACHE_DIR,
     CHUNK_MAX_CHARS,
@@ -68,7 +67,6 @@ class RAGPipeline:
             print("Loading indices from cache...")
             try:
                 self._load_from_cache()
-                self._legal_agent = LegalCaseAgent(self._retriever, self._generator.llm)
                 print("RAG Pipeline initialised successfully from cache!")
                 return
             except Exception as e:
@@ -83,7 +81,6 @@ class RAGPipeline:
         self._retriever = HybridRetriever(
             semantic_docs=self.semantic_docs, embeddings=self._embeddings
         )
-        self._legal_agent = LegalCaseAgent(self._retriever, self._generator.llm)
 
         if use_cache:
             print("Saving indices to cache...")
@@ -187,24 +184,6 @@ class RAGPipeline:
 
         sources = self._generator.format_sources(retrieved_docs, scores)
         return sources, self._generator.generate_stream(query=query, documents=retrieved_docs)
-
-    def analyze_case(
-        self,
-        case_text: str,
-        top_n_per_search: int,
-        max_searches: int,
-    ) -> dict:
-        result = self._legal_agent.analyze(
-            case_text=case_text,
-            top_n_per_search=top_n_per_search,
-            max_searches=max_searches,
-            score_threshold=RERANKER_SCORE_THRESHOLD,
-            min_docs=MIN_RETRIEVED_DOCS,
-        )
-        result["sources"] = self._generator.format_sources(
-            result.pop("documents"), result.pop("scores")
-        )
-        return result
 
     def query_with_contexts(self, query: str, top_n: int = RERANKER_TOP_N) -> dict:
         """Same as `query` but also returns the raw retrieved contexts.

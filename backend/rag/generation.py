@@ -18,30 +18,6 @@ from templates import SYSTEM_TEXT_TEMPLATE
 logger = logging.getLogger(__name__)
 
 
-def create_llm():
-    """Create the configured LLM without making a network request."""
-    if USE_OLLAMA:
-        return Ollama(
-            model=OLLAMA_MODEL,
-            base_url=OLLAMA_HOST,
-            temperature=LLM_TEMPERATURE,
-        )
-
-    if not CLAUDE_API_KEY:
-        raise ValueError("CLAUDE_API_KEY is required when USE_OLLAMA=false")
-
-    options = {
-        "model": CLAUDE_MODEL,
-        "api_key": CLAUDE_API_KEY,
-        "temperature": LLM_TEMPERATURE,
-        "max_tokens": 2048,
-    }
-    if CLAUDE_URL:
-        options["base_url"] = CLAUDE_URL.rstrip("/")
-
-    return ChatAnthropic(**options)
-
-
 class Generator:
     """
     LLM-based answer generator for RAG system.
@@ -51,7 +27,16 @@ class Generator:
     """
 
     def __init__(self):
-        self.llm = create_llm()
+        if USE_OLLAMA:
+            self.llm = Ollama(model=OLLAMA_MODEL, base_url=OLLAMA_HOST, temperature=LLM_TEMPERATURE)
+        else:
+            self.llm = ChatAnthropic(
+                model=CLAUDE_MODEL,
+                base_url=f"{CLAUDE_URL}/anthropic",
+                api_key=CLAUDE_API_KEY,
+                temperature=LLM_TEMPERATURE,
+                max_tokens=2048,
+            )
 
         self.system_template = SYSTEM_TEXT_TEMPLATE
         self.doc_prompt = PromptTemplate.from_template(

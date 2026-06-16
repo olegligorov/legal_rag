@@ -80,25 +80,6 @@ async def query_rag_tool(
 
 
 @mcp.tool()
-async def analyze_legal_case_tool(
-    case: str,
-    top_n_per_search: int | None = None,
-    max_searches: int | None = None,
-    ctx: Context = None,
-) -> dict[str, Any]:
-    """Analyze a complex Bulgarian legal case with multi-step retrieval.
-
-    The agent decomposes the facts into legal issues, performs several focused
-    searches, connects the retrieved provisions, and returns a cited legal
-    analysis plus an auditable search trace. Use this for fact patterns and
-    disputes that require more than a single direct legal question.
-    """
-    return await tools.analyze_legal_case(
-        _get_client(ctx), case, top_n_per_search, max_searches
-    )
-
-
-@mcp.tool()
 async def batch_query_tool(
     questions: list[str],
     top_n: int | None = None,
